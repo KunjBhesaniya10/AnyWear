@@ -1,0 +1,5 @@
+{
+  "name": "AnyWear",
+  "description": "A Universal Virtual Fitting Room Chrome Extension using Gemini 2.5 Flash Image. Mix and match items from any store onto your persistent body profile.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "AnyWear: AI Virtual Fitting Room",
+  "version": "1.0.0",
+  "description": "Mix and match items from different websites onto your persistent body profile using Gemini AI.",
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "activeTab",
+    "scripting",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.ts"],
+      "run_at": "document_idle"
+    }
+  ],
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "action": {
+    "default_title": "Open AnyWear"
+  }
+}
