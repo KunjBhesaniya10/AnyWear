@@ -1,133 +1,165 @@
-// This script runs on web pages (Amazon, Myntra, etc.)
-
+// AnyWear Content Script - Smarter detection and robust UI
 interface ProductDetails {
   title: string;
   description: string;
   imageUrl: string;
 }
 
-// Helper to find texture/fabric details
+const FASHION_KEYWORDS = ['shirt', 'pant', 'dress', 'shoe', 'wear', 'cloth', 'model', 'jean', 'jacket', 'coat', 'suit', 'top', 'bottom', 'skirt', 'apparel', 'fit'];
+
+function isFashionImage(img: HTMLImageElement): boolean {
+  const rect = img.getBoundingClientRect();
+  // Filter by size
+  if (rect.width < 200 || rect.height < 200) return false;
+  
+  // Filter by aspect ratio (mostly vertical or square for clothing)
+  const ratio = rect.height / rect.width;
+  if (ratio < 0.5 || ratio > 3) return false;
+
+  // Filter by context (alt text or src)
+  const searchString = (img.alt + " " + img.src + " " + img.className).toLowerCase();
+  return FASHION_KEYWORDS.some(keyword => searchString.includes(keyword));
+}
+
 function extractFabricDetails(): string {
-  const keywords = ["Material", "Fabric", "Composition", "Fit", "Description", "Details"];
+  const keywords = ["Material", "Fabric", "Composition", "Fit", "Description", "Details", "Cotton", "Polyester", "Silk"];
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
   
   let details = "";
   let node;
   let count = 0;
   
-  // Basic heuristic: Scan text nodes for keywords, capture surrounding text
-  while ((node = walker.nextNode()) && count < 10) {
+  while ((node = walker.nextNode()) && count < 8) {
     const text = node.textContent?.trim();
-    if (text && keywords.some(k => text.includes(k)) && text.length > 10 && text.length < 300) {
+    if (text && keywords.some(k => text.includes(k)) && text.length > 10 && text.length < 400) {
       details += text + ". ";
       count++;
     }
   }
-
-  // Fallback to meta description if nothing found
-  if (!details) {
-    const metaDesc = document.querySelector('meta[name="description"]');
-    if (metaDesc) details = metaDesc.getAttribute('content') || "";
-  }
-
   return details.trim();
 }
 
 function getProductTitle(): string {
   const h1 = document.querySelector('h1');
-  return h1 ? h1.innerText.trim() : document.title;
+  if (h1) return h1.innerText.trim();
+  const ogTitle = document.querySelector('meta[property="og:title"]');
+  if (ogTitle) return (ogTitle as HTMLMetaElement).content;
+  return document.title.split('|')[0].split('-')[0].trim();
 }
 
-// Inject Hover Button Logic
+let activeBtn: HTMLButtonElement | null = null;
+
 document.addEventListener('mouseover', (e) => {
   const target = e.target as HTMLElement;
-  
   if (target.tagName === 'IMG') {
     const img = target as HTMLImageElement;
-    
-    // Ignore small icons or tiny images
-    if (img.width < 200 || img.height < 200) return;
-
-    // Check if we already injected a button wrapper
-    if (img.parentElement?.classList.contains('stylein-wrapper')) return;
-
+    if (!isFashionImage(img)) return;
+    if (activeBtn) return;
     injectHoverButton(img);
   }
-});
+}, { passive: true });
 
 function injectHoverButton(img: HTMLImageElement) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'stylein-wrapper';
-  wrapper.style.position = 'relative';
-  wrapper.style.display = 'inline-block';
-  
   const button = document.createElement('button');
-  button.innerText = "✨ AnyWear"; // REBRANDED
-  button.style.position = 'absolute';
-  button.style.zIndex = '99999';
-  button.style.top = '10px';
-  button.style.right = '10px';
-  button.style.background = 'linear-gradient(135deg, #4F46E5, #7C3AED)'; // Gradient
-  button.style.color = 'white';
-  button.style.border = 'none';
-  button.style.borderRadius = '20px';
-  button.style.padding = '8px 16px';
-  button.style.cursor = 'pointer';
-  button.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.2)';
-  button.style.fontSize = '14px';
-  button.style.fontWeight = 'bold';
-  button.style.transition = 'all 0.2s';
-
-  // Position logic
-  const rect = img.getBoundingClientRect();
-  button.style.left = `${rect.left + window.scrollX + rect.width - 100}px`;
-  button.style.top = `${rect.top + window.scrollY + 10}px`;
+  button.className = 'anywear-float-btn';
+  button.innerHTML = "✨ AnyWear";
   
-  // Append to body
-  document.body.appendChild(button);
+  // Use a fixed width and very specific styles to prevent site CSS interference
+  Object.assign(button.style, {
+    position: 'absolute',
+    zIndex: '2147483647',
+    background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+    color: 'white',
+    border: '2px solid rgba(255,255,255,0.4)',
+    borderRadius: '100px',
+    padding: '0 16px',
+    height: '36px',
+    width: 'auto',
+    minWidth: '110px',
+    maxWidth: '180px',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: '800',
+    boxShadow: '0 10px 25px -5px rgba(79, 70, 229, 0.4)',
+    transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+    pointerEvents: 'auto',
+    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    whiteSpace: 'nowrap',
+    margin: '0',
+    boxSizing: 'border-box'
+  });
 
-  // Remove button after a few seconds of no hover on image
-  let timeout: any;
-  const removeButton = () => {
-    timeout = setTimeout(() => {
-      button.remove();
-      img.removeEventListener('mouseleave', removeButton);
-    }, 2000);
+  const updatePosition = () => {
+    const rect = img.getBoundingClientRect();
+    const top = rect.top + window.scrollY + 12;
+    const left = rect.left + window.scrollX + 12;
+    button.style.top = `${top}px`;
+    button.style.left = `${left}px`;
   };
+
+  updatePosition();
+  document.body.appendChild(button);
+  activeBtn = button;
+
+  button.onmouseenter = () => { 
+    button.style.transform = 'scale(1.05) translateY(-2px)';
+    button.style.boxShadow = '0 15px 30px -5px rgba(79, 70, 229, 0.5)';
+  };
+  button.onmouseleave = () => { 
+    button.style.transform = 'scale(1) translateY(0)';
+  };
+
+  const cleanup = () => {
+    if (activeBtn === button) {
+      button.remove();
+      activeBtn = null;
+    }
+  };
+
+  // Improved hover lifecycle
+  const checkLeave = (e: MouseEvent) => {
+    const related = e.relatedTarget as HTMLElement;
+    if (related !== button && related !== img) {
+      cleanup();
+    }
+  };
+
+  img.addEventListener('mouseleave', checkLeave);
+  button.addEventListener('mouseleave', checkLeave);
   
-  button.addEventListener('mouseenter', () => clearTimeout(timeout));
-  button.addEventListener('mouseleave', removeButton);
-  img.addEventListener('mouseleave', removeButton);
+  // Remove if image is scrolled away
+  window.addEventListener('scroll', cleanup, { once: true, passive: true });
 
   button.onclick = async (evt) => {
     evt.preventDefault();
     evt.stopPropagation();
     
-    button.innerText = "Extracting...";
+    button.innerText = "✨ Processing...";
+    button.disabled = true;
     
     let bestImageUrl = img.src;
-    const zoomAttr = img.getAttribute('data-zoom-image') || img.getAttribute('data-high-res');
-    if (zoomAttr) bestImageUrl = zoomAttr;
-
-    const title = getProductTitle();
-    const details = extractFabricDetails();
-    const richDescription = `${title}. ${details}`;
+    const zoomAttr = img.getAttribute('data-zoom-image') || img.getAttribute('data-high-res') || img.src;
+    if (zoomAttr && zoomAttr.startsWith('http')) bestImageUrl = zoomAttr;
 
     const product = {
       id: crypto.randomUUID(),
       url: window.location.href,
-      title: title,
+      title: getProductTitle(),
       imageUrl: bestImageUrl,
-      description: richDescription,
+      description: extractFabricDetails(),
       timestamp: Date.now()
     };
 
     chrome.runtime.sendMessage({
       type: 'ADD_PRODUCT',
       payload: product
-    }, (response: any) => {
-      button.innerText = "Added!";
-      setTimeout(() => button.remove(), 1500);
+    }, () => {
+      button.innerText = "✅ Saved!";
+      button.style.background = '#10b981';
+      setTimeout(cleanup, 2000);
     });
   };
 }
