@@ -21,15 +21,46 @@ export const validateUserImage = async (base64Image: string): Promise<{ isValid:
   const parts = [
     fileToGenerativePart(base64Image, "image/jpeg"),
     {
-      text: `Analyze this image for a virtual try-on application profile. 
-      
-      Strict Safety & Quality Rules:
-      1. Is it a real photo of a human? (No cartoons, no objects).
-      2. Is the person appropriately covered? (No explicit nudity).
-      3. Is the body visible from at least knees up? (Full body preferred).
-      4. Is the content safe, legal, and appropriate for general audiences? (No violence, hate symbols, gore, or illegal acts).
-      
-      Return a JSON object: { "isValid": boolean, "reason": "string explaining why if invalid, or 'OK' if valid" }`
+      text: `Act as a strict Quality Assurance AI for a Fashion Virtual Try-On application. Your job is to filter out any user images that will result in a poor or failed try-on generation.
+
+Analyze the provided image against the following **Mandatory Acceptance Criteria**. If ANY of these criteria are failed, the image must be marked invalid.
+
+1.  **Single Subject Requirement:**
+    - The image must contain exactly **ONE** primary human subject.
+    - Reject if there are multiple people, background crowds that are in focus, or significant "ghost" reflections in mirrors.
+
+2.  **Strict Body Framing & Visibility:**
+    - **Vertical Coverage:** The person must be visible from the **top of the head** down to **at least the knees**.
+    - Reject "Selfies" (Head/Shoulders only).
+    - Reject "Waist-up" shots.
+    - Reject if the head is cut off by the frame edge.
+    - The subject should occupy at least 50% of the image height (not too far away).
+
+3.  **Pose & Orientation:**
+    - **Frontal Pose Only:** The subject must be facing the camera directly. Shoulders and hips must be roughly parallel to the image plane.
+    - Reject Side Profiles (looking left/right).
+    - Reject Back shots (facing away).
+    - Reject extreme angles (high-angle looking down or low-angle looking up).
+    - Arms should be clearly visible (ideally not crossed excessively covering the chest).
+
+4.  **Occlusion & Clarity:**
+    - The torso and legs must be clear of obstructions.
+    - Reject if the person is holding large objects (bags, boxes, pets) that block the body.
+    - Reject if the person is holding a phone in front of their chest/body (mirror selfies).
+    - Reject if lighting is extremely poor (silhouette) or blurry.
+
+5.  **Safety & Content Policy:**
+    - **Realism:** Must be a real photograph (No AI avatars, cartoons, mannequins, or sketches).
+    - **Decency:** The subject must be appropriately clothed (No underwear/lingerie shots, no explicit nudity).
+    - **Safety:** No weapons, drugs, hate symbols, or illegal acts.
+
+**Output Format:**
+Return a purely JSON object with no markdown formatting:
+{
+  "isValid": boolean,
+  "error_code": "FRAME_CROP" | "BAD_POSE" | "MULTIPLE_PEOPLE" | "OCCLUSION" | "SAFETY" | "NONE",
+  "reason": "A concise, user-friendly error message explaining exactly what is wrong (e.g., 'Please stand further back; we need to see you from head to knees.'). If valid, return 'Perfect'."
+}`
     }
   ];
 
