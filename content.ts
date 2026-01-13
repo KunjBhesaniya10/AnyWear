@@ -1,24 +1,84 @@
-// AnyWear Content Script - Smarter detection and robust UI
-interface ProductDetails {
+// AnyWear Content Script - Product Page Detection and Extraction
+interface ProductData {
+  isValid: boolean;
+  image: string;
   title: string;
   description: string;
-  imageUrl: string;
 }
 
-const FASHION_KEYWORDS = ['shirt', 'pant', 'dress', 'shoe', 'wear', 'cloth', 'model', 'jean', 'jacket', 'coat', 'suit', 'top', 'bottom', 'skirt', 'apparel', 'fit'];
+const marketplacePatterns = [
+  '/dp/',             // Amazon (Detail Page)
+  '/gp/product/',     // Amazon (General Product)
+  '/p/',              // Flipkart, Target (Short product links)
+  '/buy/',            // Myntra (e.g., myntra.com/tshirt/buy)
+  '/ip/',             // Walmart (Item Page)
+  '/pd/',             // Generic "Product Detail"
+  '/catalog/product/' // Magento / Adobe Commerce default
+];
 
-function isFashionImage(img: HTMLImageElement): boolean {
-  const rect = img.getBoundingClientRect();
-  // Filter by size
-  if (rect.width < 200 || rect.height < 200) return false;
+function isProductPage(): boolean {
+  const pathname = window.location.pathname;
+  return marketplacePatterns.some(pattern => pathname.includes(pattern));
+}
+
+function extractFromSchema(): ProductData | null {
+  const scripts = document.querySelectorAll('script[type="application/ld+json"]');
   
-  // Filter by aspect ratio (mostly vertical or square for clothing)
-  const ratio = rect.height / rect.width;
-  if (ratio < 0.5 || ratio > 3) return false;
+  for (const script of scripts) {
+    try {
+      const data = JSON.parse(script.textContent || '');
+      if (data['@type'] === 'Product') {
+        const image = data.image || data.image?.[0] || '';
+        const title = data.name || '';
+        const description = data.description || '';
+        
+        if (image && title) {
+          return {
+            isValid: true,
+            image: image,
+            title: title,
+            description: description
+          };
+        }
+      }
+    } catch (e) {
+      console.error('Failed to parse schema:', e);
+    }
+  }
+  
+  return null;
+}
 
-  // Filter by context (alt text or src)
-  const searchString = (img.alt + " " + img.src + " " + img.className).toLowerCase();
-  return FASHION_KEYWORDS.some(keyword => searchString.includes(keyword));
+function extractFromPage(): ProductData | null {
+  if (!isProductPage()) {
+    return {
+      isValid: false,
+      image: '',
+      title: '',
+      description: ''
+    };
+  }
+
+  // First try schema extraction
+  const schemaData = extractFromSchema();
+  if (schemaData && schemaData.isValid) {
+    return schemaData;
+  }
+
+  // Fallback to manual extraction
+  const mainImage = document.querySelector('img[id*="main"], img[class*="main"], img[class*="product"], img[alt*="product"]') as HTMLImageElement;
+  const title = document.querySelector('h1')?.textContent?.trim() || document.title.split('|')[0].split('-')[0].trim();
+  
+  if (mainImage && title) {
+    return {
+      isValid: true,
+      image: mainImage.src,
+      title: title,
+      description: extractFabricDetails()
+    };
+  }
+
+  return null;
 }
 
 function extractFabricDetails(): string {
@@ -39,30 +99,34 @@ function extractFabricDetails(): string {
   return details.trim();
 }
 
-function getProductTitle(): string {
-  const h1 = document.querySelector('h1');
-  if (h1) return h1.innerText.trim();
-  const ogTitle = document.querySelector('meta[property="og:title"]');
-  if (ogTitle) return (ogTitle as HTMLMetaElement).content;
-  return document.title.split('|')[0].split('-')[0].trim();
+// Main scan function
+function scanPage(): ProductData | null {
+  try {
+    return extractFromPage();
+  } catch (e) {
+    console.error('Scan page failed:', e);
+    return null;
+  }
 }
 
 let activeBtn: HTMLButtonElement | null = null;
 
-document.addEventListener('mouseover', (e) => {
-  const target = e.target as HTMLElement;
-  if (target.tagName === 'IMG') {
-    const img = target as HTMLImageElement;
-    if (!isFashionImage(img)) return;
-    if (activeBtn) return;
-    injectHoverButton(img);
-  }
-}, { passive: true });
+// Only run on product pages
+if (isProductPage()) {
+  document.addEventListener('mouseover', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'IMG') {
+      const img = target as HTMLImageElement;
+      if (activeBtn) return;
+      injectHoverButton(img);
+    }
+  }, { passive: true });
+}
 
 function injectHoverButton(img: HTMLImageElement) {
   const button = document.createElement('button');
   button.className = 'anywear-float-btn';
-  button.innerHTML = "✨ AnyWear";
+  button.innerHTML = "✨ Add to Wardrobe";
   
   // Use a fixed width and very specific styles to prevent site CSS interference
   Object.assign(button.style, {
@@ -75,8 +139,8 @@ function injectHoverButton(img: HTMLImageElement) {
     padding: '0 16px',
     height: '36px',
     width: 'auto',
-    minWidth: '110px',
-    maxWidth: '180px',
+    minWidth: '140px',
+    maxWidth: '200px',
     cursor: 'pointer',
     fontSize: '13px',
     fontWeight: '800',
@@ -144,12 +208,20 @@ function injectHoverButton(img: HTMLImageElement) {
     const zoomAttr = img.getAttribute('data-zoom-image') || img.getAttribute('data-high-res') || img.src;
     if (zoomAttr && zoomAttr.startsWith('http')) bestImageUrl = zoomAttr;
 
+    const productData = scanPage();
+    if (!productData || !productData.isValid) {
+      button.innerText = "❌ Product Not Found";
+      button.style.background = '#ef4444';
+      setTimeout(cleanup, 2000);
+      return;
+    }
+
     const product = {
       id: crypto.randomUUID(),
       url: window.location.href,
-      title: getProductTitle(),
+      title: productData.title,
       imageUrl: bestImageUrl,
-      description: extractFabricDetails(),
+      description: productData.description,
       timestamp: Date.now()
     };
 
@@ -157,9 +229,17 @@ function injectHoverButton(img: HTMLImageElement) {
       type: 'ADD_PRODUCT',
       payload: product
     }, () => {
-      button.innerText = "✅ Saved!";
+      button.innerText = "✅ Added!";
       button.style.background = '#10b981';
       setTimeout(cleanup, 2000);
     });
   };
 }
+
+// Listen for wardrobe state changes
+chrome.runtime.onMessage.addListener((message: any) => {
+  if (message.type === 'WARDROBE_UPDATED') {
+    // Update UI based on wardrobe state if needed
+    console.log('Wardrobe updated:', message.payload);
+  }
+});

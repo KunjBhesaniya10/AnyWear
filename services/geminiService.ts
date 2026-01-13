@@ -2,8 +2,19 @@ import { GoogleGenAI } from "@google/genai";
 import { GEMINI_MODEL } from '../constants';
 import { ScrapedProduct } from '../types';
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Initialize Gemini Client with hardcoded API key
+const getApiKey = async (): Promise<string> => {
+  // Hardcoded API key for now
+  return "AIzaSyBTdRqIfrhX615Dke6SKJepcZWw3eBHU7g";
+};
+
+const getAiClient = async (): Promise<GoogleGenAI> => {
+  const apiKey = await getApiKey();
+  if (!apiKey) {
+    throw new Error('Missing Gemini API key.');
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 const fileToGenerativePart = (base64Data: string, mimeType: string) => {
   return {
@@ -65,6 +76,7 @@ Return a purely JSON object with no markdown formatting:
   ];
 
   try {
+    const ai = await getAiClient();
     // Note: responseMimeType is NOT supported for gemini-2.5-flash-image, 
     // so we must parse the text manually.
     const response = await ai.models.generateContent({
@@ -152,6 +164,7 @@ Lighting: Match the clothing lighting to the user's environment.
   parts.push({ text: systemPrompt });
 
   try {
+    const ai = await getAiClient();
     const response = await ai.models.generateContent({
       model: GEMINI_MODEL,
       contents: { parts },

@@ -1,12 +1,8 @@
 
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { copyFileSync, mkdirSync, existsSync } from 'fs';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { copyFileSync, existsSync, mkdirSync } from 'fs';
 
 // Simple plugin to copy manifest.json to dist
 const copyManifest = () => ({
@@ -16,7 +12,6 @@ const copyManifest = () => ({
       mkdirSync('dist');
     }
     copyFileSync('manifest.json', 'dist/manifest.json');
-    console.log('\n✓ manifest.json copied to dist/');
   },
 });
 
@@ -30,9 +25,10 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        index: resolve(__dirname, 'index.html'),
-        background: resolve(__dirname, 'background.ts'),
-        content: resolve(__dirname, 'content.ts'),
+        index: 'index.html',
+        popup: 'popup.html',
+        background: 'background.ts',
+        content: 'content.ts',
       },
       output: {
         entryFileNames: (chunkInfo) => {

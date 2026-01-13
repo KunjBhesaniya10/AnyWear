@@ -30,6 +30,35 @@ export interface GenerationRequest {
   bottom?: ScrapedProduct;
 }
 
+export interface OutfitHistory {
+  id: string;
+  resultImage: string;
+  top?: ScrapedProduct;
+  bottom?: ScrapedProduct;
+  timestamp: number;
+  userImage: string;
+}
+
+export interface SavedOutfit {
+  id: string;
+  name: string;
+  description?: string;
+  resultImage: string;
+  top?: ScrapedProduct;
+  bottom?: ScrapedProduct;
+  createdAt: number;
+  tags?: string[];
+}
+
+export interface OutfitCollection {
+  id: string;
+  name: string;
+  description?: string;
+  outfits: SavedOutfit[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 // Chrome API Types (Mocking for TS compilation if @types/chrome is missing in environment)
 declare global {
   // eslint-disable-next-line no-var

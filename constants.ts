@@ -1,7 +1,9 @@
 export const STORAGE_KEYS = {
   USER_PROFILE: 'stylein_user_profile',
   WARDROBE: 'stylein_current_wardrobe',
-  GENERATED_HISTORY: 'stylein_history'
+  HISTORY: 'stylein_history',
+  SAVED_OUTFITS: 'stylein_saved_outfits',
+  COLLECTIONS: 'stylein_collections'
 };
 
-export const GEMINI_MODEL = 'gemini-2.5-flash-image';
+export const GEMINI_MODEL = 'gemini-3-flash';
