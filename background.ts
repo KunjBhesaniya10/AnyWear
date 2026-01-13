@@ -1,17 +1,26 @@
 import { STORAGE_KEYS } from './constants';
 import { ScrapedProduct, WardrobeState } from './types';
 
+// Set panel behavior to prevent conflicts
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
+
 // Open dashboard tab when extension icon is clicked
-chrome.action.onClicked.addListener(async (tab) => {
-  if (tab.id) {
-    await chrome.tabs.create({
-      url: chrome.runtime.getURL('index.html')
-    });
-  }
+chrome.action.onClicked.addListener(async () => {
+  await chrome.tabs.create({
+    url: chrome.runtime.getURL('index.html?view=dashboard')
+  });
 });
 
 // Handle messages from content scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'OPEN_SIDE_PANEL') {
+    // Open side panel on the current window
+    if (sender.tab?.id) {
+      chrome.sidePanel.open({ tabId: sender.tab.id });
+    }
+    return true;
+  }
+
   if (message.type === 'ADD_PRODUCT') {
     handleNewProduct(message.payload).then(() => {
       sendResponse({ status: 'success' });

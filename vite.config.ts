@@ -1,6 +1,8 @@
 
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from 'tailwindcss';
+import autoprefixer from 'autoprefixer';
 
 import { copyFileSync, existsSync, mkdirSync } from 'fs';
 
@@ -17,6 +19,14 @@ const copyManifest = () => ({
 
 export default defineConfig({
   plugins: [react(), copyManifest()],
+  css: {
+    postcss: {
+      plugins: [
+        tailwindcss,
+        autoprefixer,
+      ],
+    },
+  },
   define: {
     'process.env.API_KEY': JSON.stringify(process.env.API_KEY),
   },
@@ -26,7 +36,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: 'index.html',
-        popup: 'popup.html',
         background: 'background.ts',
         content: 'content.ts',
       },

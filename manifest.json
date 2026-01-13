@@ -26,7 +26,7 @@
     }
   ],
   "side_panel": {
-    "default_path": "index.html"
+    "default_path": "index.html?view=panel"
   },
   "action": {
     "default_title": "Open AnyWear Dashboard"

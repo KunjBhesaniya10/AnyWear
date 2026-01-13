@@ -1,245 +1,125 @@
-// AnyWear Content Script - Product Page Detection and Extraction
-interface ProductData {
-  isValid: boolean;
-  image: string;
-  title: string;
-  description: string;
-}
+import { STORAGE_KEYS } from './constants';
+import { ScrapedProduct, WardrobeState } from './types';
 
-const marketplacePatterns = [
-  '/dp/',             // Amazon (Detail Page)
-  '/gp/product/',     // Amazon (General Product)
-  '/p/',              // Flipkart, Target (Short product links)
-  '/buy/',            // Myntra (e.g., myntra.com/tshirt/buy)
-  '/ip/',             // Walmart (Item Page)
-  '/pd/',             // Generic "Product Detail"
-  '/catalog/product/' // Magento / Adobe Commerce default
-];
+// Create floating hanger button
+function createFloatingButton() {
+  const existingButton = document.getElementById('anywear-fab');
+  if (existingButton) existingButton.remove();
 
-function isProductPage(): boolean {
-  const pathname = window.location.pathname;
-  return marketplacePatterns.some(pattern => pathname.includes(pattern));
-}
-
-function extractFromSchema(): ProductData | null {
-  const scripts = document.querySelectorAll('script[type="application/ld+json"]');
+  const fab = document.createElement('div');
+  fab.id = 'anywear-fab';
+  fab.innerHTML = '👔';
+  fab.style.cssText = `
+    position: fixed; bottom: 20px; right: 20px; width: 56px; height: 56px;
+    border-radius: 50%; background: linear-gradient(135deg, #6366f1 0%, #9333ea 100%);
+    border: none; color: white; font-size: 24px; cursor: pointer; z-index: 9999;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); transition: all 0.3s ease;
+    display: flex; align-items: center; justify-content: center;
+  `;
   
-  for (const script of scripts) {
+  fab.addEventListener('mouseenter', () => {
+    fab.style.transform = 'scale(1.1)';
+    fab.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.25)';
+  });
+  
+  fab.addEventListener('mouseleave', () => {
+    fab.style.transform = 'scale(1)';
+    fab.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+  });
+
+  fab.addEventListener('click', async () => {
     try {
-      const data = JSON.parse(script.textContent || '');
-      if (data['@type'] === 'Product') {
-        const image = data.image || data.image?.[0] || '';
-        const title = data.name || '';
-        const description = data.description || '';
-        
-        if (image && title) {
-          return {
-            isValid: true,
-            image: image,
-            title: title,
-            description: description
-          };
-        }
-      }
-    } catch (e) {
-      console.error('Failed to parse schema:', e);
+      await chrome.runtime.sendMessage({ type: 'OPEN_SIDE_PANEL' });
+    } catch (error) {
+      showToast('Please open Side Panel from Chrome menu to start trying on!');
     }
-  }
-  
-  return null;
+  });
+
+  document.body.appendChild(fab);
 }
 
-function extractFromPage(): ProductData | null {
-  if (!isProductPage()) {
-    return {
-      isValid: false,
-      image: '',
-      title: '',
-      description: ''
-    };
-  }
-
-  // First try schema extraction
-  const schemaData = extractFromSchema();
-  if (schemaData && schemaData.isValid) {
-    return schemaData;
-  }
-
-  // Fallback to manual extraction
-  const mainImage = document.querySelector('img[id*="main"], img[class*="main"], img[class*="product"], img[alt*="product"]') as HTMLImageElement;
-  const title = document.querySelector('h1')?.textContent?.trim() || document.title.split('|')[0].split('-')[0].trim();
+// Create toast notification
+function showToast(message: string) {
+  const toast = document.createElement('div');
+  toast.textContent = message;
+  toast.style.cssText = `
+    position: fixed; top: 20px; right: 20px; background: #1f2937; color: white;
+    padding: 12px 20px; border-radius: 8px; font-size: 14px; z-index: 10000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); opacity: 0; transform: translateY(-20px);
+    transition: all 0.3s ease;
+  `;
   
-  if (mainImage && title) {
-    return {
-      isValid: true,
-      image: mainImage.src,
-      title: title,
-      description: extractFabricDetails()
-    };
-  }
-
-  return null;
+  document.body.appendChild(toast);
+  
+  setTimeout(() => {
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+  }, 100);
+  
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-20px)';
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
 }
 
-function extractFabricDetails(): string {
-  const keywords = ["Material", "Fabric", "Composition", "Fit", "Description", "Details", "Cotton", "Polyester", "Silk"];
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
-  
-  let details = "";
-  let node;
-  let count = 0;
-  
-  while ((node = walker.nextNode()) && count < 8) {
-    const text = node.textContent?.trim();
-    if (text && keywords.some(k => text.includes(k)) && text.length > 10 && text.length < 400) {
-      details += text + ". ";
-      count++;
-    }
-  }
-  return details.trim();
+// Check if current page is a shopping site
+function isShoppingSite(): boolean {
+  const shoppingSites = ['amazon.com', 'flipkart.com', 'myntra.com', 'walmart.com', 'target.com'];
+  const currentDomain = window.location.hostname.toLowerCase();
+  return shoppingSites.some(site => currentDomain.includes(site));
 }
 
-// Main scan function
-function scanPage(): ProductData | null {
+// Initialize floating button on shopping sites
+if (isShoppingSite()) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', createFloatingButton);
+  } else {
+    createFloatingButton();
+  }
+}
+
+// Existing scanPage function
+export async function scanPage(): Promise<{ isValid: boolean; image: string; title: string; description: string } | null> {
   try {
-    return extractFromPage();
-  } catch (e) {
-    console.error('Scan page failed:', e);
+    const url = new URL(window.location.href);
+    const pathname = url.pathname;
+    
+    const marketplacePatterns = ['/dp/', '/gp/product/', '/p/', '/buy/', '/ip/', '/pd/', '/catalog/product/'];
+    const isProductPage = marketplacePatterns.some(pattern => pathname.includes(pattern));
+    if (!isProductPage) return null;
+
+    const scripts = document.querySelectorAll('script[type="application/ld+json"]');
+    for (const script of scripts) {
+      try {
+        const data = JSON.parse(script.textContent || '');
+        if (data['@type'] === 'Product') {
+          const image = data.image || data.image?.[0]?.url || '';
+          const title = data.name || '';
+          const description = data.description || '';
+          
+          if (image && title) {
+            return { isValid: true, image, title, description };
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing JSON-LD:', e);
+      }
+    }
+
+    const title = document.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
+                  document.querySelector('title')?.textContent || '';
+    const image = document.querySelector('meta[property="og:image"]')?.getAttribute('content') ||
+                 document.querySelector('img')?.src || '';
+    const description = document.querySelector('meta[property="og:description"]')?.getAttribute('content') || '';
+
+    if (title && image) {
+      return { isValid: true, image, title, description };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error scanning page:', error);
     return null;
   }
 }
-
-let activeBtn: HTMLButtonElement | null = null;
-
-// Only run on product pages
-if (isProductPage()) {
-  document.addEventListener('mouseover', (e) => {
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'IMG') {
-      const img = target as HTMLImageElement;
-      if (activeBtn) return;
-      injectHoverButton(img);
-    }
-  }, { passive: true });
-}
-
-function injectHoverButton(img: HTMLImageElement) {
-  const button = document.createElement('button');
-  button.className = 'anywear-float-btn';
-  button.innerHTML = "✨ Add to Wardrobe";
-  
-  // Use a fixed width and very specific styles to prevent site CSS interference
-  Object.assign(button.style, {
-    position: 'absolute',
-    zIndex: '2147483647',
-    background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-    color: 'white',
-    border: '2px solid rgba(255,255,255,0.4)',
-    borderRadius: '100px',
-    padding: '0 16px',
-    height: '36px',
-    width: 'auto',
-    minWidth: '140px',
-    maxWidth: '200px',
-    cursor: 'pointer',
-    fontSize: '13px',
-    fontWeight: '800',
-    boxShadow: '0 10px 25px -5px rgba(79, 70, 229, 0.4)',
-    transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-    pointerEvents: 'auto',
-    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    whiteSpace: 'nowrap',
-    margin: '0',
-    boxSizing: 'border-box'
-  });
-
-  const updatePosition = () => {
-    const rect = img.getBoundingClientRect();
-    const top = rect.top + window.scrollY + 12;
-    const left = rect.left + window.scrollX + 12;
-    button.style.top = `${top}px`;
-    button.style.left = `${left}px`;
-  };
-
-  updatePosition();
-  document.body.appendChild(button);
-  activeBtn = button;
-
-  button.onmouseenter = () => { 
-    button.style.transform = 'scale(1.05) translateY(-2px)';
-    button.style.boxShadow = '0 15px 30px -5px rgba(79, 70, 229, 0.5)';
-  };
-  button.onmouseleave = () => { 
-    button.style.transform = 'scale(1) translateY(0)';
-  };
-
-  const cleanup = () => {
-    if (activeBtn === button) {
-      button.remove();
-      activeBtn = null;
-    }
-  };
-
-  // Improved hover lifecycle
-  const checkLeave = (e: MouseEvent) => {
-    const related = e.relatedTarget as HTMLElement;
-    if (related !== button && related !== img) {
-      cleanup();
-    }
-  };
-
-  img.addEventListener('mouseleave', checkLeave);
-  button.addEventListener('mouseleave', checkLeave);
-  
-  // Remove if image is scrolled away
-  window.addEventListener('scroll', cleanup, { once: true, passive: true });
-
-  button.onclick = async (evt) => {
-    evt.preventDefault();
-    evt.stopPropagation();
-    
-    button.innerText = "✨ Processing...";
-    button.disabled = true;
-    
-    let bestImageUrl = img.src;
-    const zoomAttr = img.getAttribute('data-zoom-image') || img.getAttribute('data-high-res') || img.src;
-    if (zoomAttr && zoomAttr.startsWith('http')) bestImageUrl = zoomAttr;
-
-    const productData = scanPage();
-    if (!productData || !productData.isValid) {
-      button.innerText = "❌ Product Not Found";
-      button.style.background = '#ef4444';
-      setTimeout(cleanup, 2000);
-      return;
-    }
-
-    const product = {
-      id: crypto.randomUUID(),
-      url: window.location.href,
-      title: productData.title,
-      imageUrl: bestImageUrl,
-      description: productData.description,
-      timestamp: Date.now()
-    };
-
-    chrome.runtime.sendMessage({
-      type: 'ADD_PRODUCT',
-      payload: product
-    }, () => {
-      button.innerText = "✅ Added!";
-      button.style.background = '#10b981';
-      setTimeout(cleanup, 2000);
-    });
-  };
-}
-
-// Listen for wardrobe state changes
-chrome.runtime.onMessage.addListener((message: any) => {
-  if (message.type === 'WARDROBE_UPDATED') {
-    // Update UI based on wardrobe state if needed
-    console.log('Wardrobe updated:', message.payload);
-  }
-});
